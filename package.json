@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@openzeppelin/test-helpers": "^0.5.4",
+    "dotenv": "^8.2.0",
+    "openzeppelin-solidity": "^2.4.0",
+    "truffle": "^5.1.1",
+    "truffle-hdwallet-provider": "^1.0.17"
+  }
+}
