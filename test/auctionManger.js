@@ -22,6 +22,9 @@ contract('AuctionManager', (accounts) => {
     await AuctionManagerInstance.createAuction()
     const AuctionInstance = await Auction.at(auctionAddress)
     
+    let pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
+    assert.equal(pricePerTokenInTranche / 1E18, 0, "Auction starts off with price per token of 0");    
+
     // mint 10 usdc for account 1
     const USDCInstance = await USDC.deployed();
     await USDCInstance.mint.sendTransaction(accounts[1], toBN(30000).mul(toBN(1E18)));
@@ -43,9 +46,12 @@ contract('AuctionManager', (accounts) => {
 
     // send that usdc to auction 
     await AuctionInstance.bid.sendTransaction(toBN(30000).mul(toBN(1E18)), {from: accounts[1]})
+
+    pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
+    assert.equal(pricePerTokenInTranche / 1E18, 0.5, "After a bid of 30000, auction has a price per token of $0.50");    
     
     // get balance of usdc of auction
-    const auctionUSDCBalance = await USDCInstance.balanceOf.call(auctionAddress);
+    let auctionUSDCBalance = await USDCInstance.balanceOf.call(auctionAddress);
     assert.equal(auctionUSDCBalance / 1E18, 30000, "Auction doesn not have 10 USDC");
 
     // get balance of usdc of account 1
@@ -62,24 +68,80 @@ contract('AuctionManager', (accounts) => {
     await SOVTokenInstance.addToWhiteList.sendTransaction(accounts[2]);
     // authorize and send coins to contract
     await USDCInstance.approve.sendTransaction(auctionAddress, toBN(70000).mul(toBN(1E18)), {from: accounts[2]})
-
+    // second bid 
     await AuctionInstance.bid.sendTransaction(toBN(70000).mul(toBN(1E18)), {from: accounts[2]})
 
-    const allowance = await USDCInstance.allowance.call(accounts[2], auctionAddress, {from: accounts[2]});
+    pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
+    assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 1.67, "After bids of 100,000, auction has a price per token of $1.67");    
+
+    // const allowance = await USDCInstance.allowance.call(accounts[2], auctionAddress, {from: accounts[2]});
     // console.log('allowance, ' + allowance)
 
     // get balance of sov of auction
-    const auctionSOVBalance = await SOVTokenInstance.balanceOf.call(auctionAddress);
-    assert.equal(auctionSOVBalance / 1E4, 100000, "Auction doesn not have 60000 SOV");
+    let auctionSOVBalance = await SOVTokenInstance.balanceOf.call(auctionAddress);
+    assert.equal(auctionSOVBalance / 1E4, 60000, "Auction doesn not have 60000 SOV");
 
     // trigger the payout of the contract.
     await AuctionInstance.payout.sendTransaction();
     
     const accountOneSOVBalance = await SOVTokenInstance.balanceOf.call(accounts[1]);
-    assert.equal(accountOneSOVBalance / 1E4, toBN(100000).mul(toBN(3/10)), "account 1 doesn not have 17142.8571 SOV");
+    assert.equal(accountOneSOVBalance / 1E4, toBN(60000).mul(toBN(3)).div(toBN(10)), "account 1 doesn not have 18000 SOV");
 
     const accountTwoSOVBalance = await SOVTokenInstance.balanceOf.call(accounts[2]);
-    assert.equal(accountTwoSOVBalance / 1E4, toBN(100000).mul(toBN(7/10)), "account 1 doesn not have 42857.1428 SOV");
+    assert.equal(accountTwoSOVBalance / 1E4, toBN(60000).mul(toBN(7)).div(toBN(10)), "account 1 doesn not have 42000 SOV");
+
+    // check auction has no usdc no sov
+    auctionUSDCBalance = await USDCInstance.balanceOf.call(auctionAddress);
+    assert.equal(auctionUSDCBalance, 0, "Auction doesn not have 0 USDC");
+
+    auctionSOVBalance = await SOVTokenInstance.balanceOf.call(auctionAddress);
+    assert.equal(auctionSOVBalance, 0, "Auction doesn not have 0 SOV");
+
+    // check auction manager has 100,000 usdc and 0 sov
+    const auctionManagerUSDCBalance = await USDCInstance.balanceOf.call(AuctionManagerInstance.address);
+    // note it returns 99,999 repeating instead of 100,000
+    assert.equal((auctionManagerUSDCBalance / 1E18).toFixed(2), 100000, "Auction Manager doesn not have 100,000 USDC");
+
+    const auctionManagerSOVBalance = await SOVTokenInstance.balanceOf.call(AuctionManagerInstance.address);
+    assert.equal(auctionSOVBalance / 1E14, 0, "Auction Manager doesn not have 0 SOV");
+
+    // get average price of token 
+    let pricePerToken = await AuctionManagerInstance.pricePerToken.call()
+    assert.equal((pricePerToken / 1E18).toFixed(2), 1.67, "After bids of 100,000, auction manager has an average price per token of $1.67");    
+
+    // generate next auction 
+    const nextAuctionAddress = await AuctionManagerInstance.createAuction.call()
+    await AuctionManagerInstance.createAuction()
+    const NextAuctionInstance = await Auction.at(nextAuctionAddress)
+
+    // expect tranche size to work
+    const trancheSize = await NextAuctionInstance.trancheSize.call()
+    // it rounds down
+    assert.equal(trancheSize, 25853, "trancheSize does not work");    
+
+    // bid another 100k
+    // mint some coins for account 2 
+    await USDCInstance.mint.sendTransaction(accounts[1], toBN(100000).mul(toBN(1E18)));
+    // authorize and send coins to contract
+    await USDCInstance.approve.sendTransaction(nextAuctionAddress, toBN(100000).mul(toBN(1E18)), {from: accounts[1]})
+    // second bid 
+    await NextAuctionInstance.bid.sendTransaction(toBN(100000).mul(toBN(1E18)), {from: accounts[1]})
+
+    pricePerTokenInTranche = await NextAuctionInstance.pricePerToken.call()
+    assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 3.87, "After bids of 100,000, auction has a price per token of $3.87");    
+
+    // trigger the payout of the contract.
+    await NextAuctionInstance.payout.sendTransaction();
+
+    // overall price per token is 2.33
+    pricePerToken = await AuctionManagerInstance.pricePerToken.call()
+    assert.equal((pricePerToken / 1E18).toFixed(2), 2.33, "After two auctions, auction manager has an average price per token of $2.33");    
+
+    // elsewhere
+    // get auctions from auciton manager array
+    const auctionsArr = await AuctionManagerInstance.getAuctions.call();
+    assert.equal(auctionsArr[0], AuctionInstance.address, "auction");    
+    assert.equal(auctionsArr[1], NextAuctionInstance.address, "auction");    
   });
 });
 

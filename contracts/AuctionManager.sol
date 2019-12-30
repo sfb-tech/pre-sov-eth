@@ -11,8 +11,8 @@ import 'openzeppelin-solidity/contracts/math/SafeMath.sol';
 contract AuctionManager is Ownable {
 	using SafeMath for uint256;
 
-	mapping(address => Auction) auctions;
-	Auction[] auctionIndexes;
+	// mapping(address => Auction) auctions;
+	address[] public auctions;
 
 	uint256 public supply;
 	uint256 public initialPercent;
@@ -25,6 +25,7 @@ contract AuctionManager is Ownable {
 	USDC public usdc;
 
 	event AuctionCompletion(address auctionAddress);
+	// event Log(string s, uint256 amount);
 
 	constructor(
 		SOVToken _sov, 
@@ -47,25 +48,33 @@ contract AuctionManager is Ownable {
 		// supplyPercent = FixidityLib.fractional(0.4);
 	}
 
+	function getAuctions() view public returns (address[] memory ) {
+	   return auctions;
+	}
+
 	function getTrancheSize() public returns(uint256) {
-		if(auctionIndexes.length == 0) {
+		if(auctions.length == 0) {
 			return supply * initialPercent / initialPercentD;
 		}
 		// calculate based off of previous auctions 
 		uint totalRaised = 0;
 		uint sumOfTranches = 0;
-		for (uint i=0; i < auctionIndexes.length; i++) {
-			Auction auction = auctionIndexes[i];
+		for (uint i=0; i < auctions.length; i++) {
+			Auction auction = Auction(auctions[i]);
 			uint256 auctionRaised = auction.totalRaised();
 			totalRaised += auctionRaised;
 			uint256 auctionTrancheSize = auction.trancheSize();
 			sumOfTranches += auctionTrancheSize;
 		}
 
-		uint averageRaise = totalRaised / auctionIndexes.length;
+		uint averageRaise = SafeMath.div(totalRaised, auctions.length);
 		uint marshallIslandsGDP = 180000000; // 18 billion dollars
-		uint trancheSize = averageRaise / ((marshallIslandsGDP * supplyPercent * tranches * averageRaise / 2) * supply * supplyPercent - sumOfTranches); 
-
+		uint num = (supply * supplyPercent / supplyPercentD) - sumOfTranches;
+		uint a = (marshallIslandsGDP * supplyPercent / supplyPercentD);
+		uint b = (tranches * totalRaised / (auctions.length) / 10**18);
+		uint den = (a + b) / 2;
+		uint trancheSizeTokens = SafeMath.div((num * averageRaise), den); 
+		uint trancheSize = trancheSizeTokens / 10**18;
 		// return new tranche size 
 		return trancheSize;
 	}
@@ -77,14 +86,28 @@ contract AuctionManager is Ownable {
 	   	Auction newAuction = new Auction(this, sov, usdc, trancheSize);
 	    address auctionAddress = address(newAuction);
 	    // save the auction to our auctions key-value mapping
-	    auctions[auctionAddress] = newAuction;
-	   	require(auctions[address(newAuction)] == newAuction, "auction not saved.");
-	   	auctionIndexes.push(newAuction);
+	    // auctions[auctionAddress] = newAuction;
+	   	// require(auctions[address(newAuction)] == newAuction, "auction not saved.");
+	   	auctions.push(auctionAddress);
 	   	 // mint sov tokens and send those tokens to auction instance
    		sov.mint(auctionAddress, trancheSize * 10**4);
    		// add auction to whitelist, so it can transfer (in payout)
    		sov.addToWhiteList(auctionAddress);
 	    return auctionAddress;
+	}
+
+	function pricePerToken() view public returns (uint) {
+	    uint totalRaised = 0;
+	    uint sumOfTranches = 0;
+	    for (uint i=0; i < auctions.length; i++) {
+	    	Auction auction = Auction(auctions[i]);
+	    	uint256 auctionRaised = auction.totalRaised();
+	    	totalRaised += auctionRaised;
+	    	uint256 auctionTrancheSize = auction.trancheSize();
+	    	sumOfTranches += auctionTrancheSize;
+	    }
+
+	    return SafeMath.div(totalRaised, sumOfTranches);
 	}
 
 	// function onAuctionCompletion(address auctionAddress) public { 

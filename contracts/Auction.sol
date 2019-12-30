@@ -16,17 +16,11 @@ contract Auction is Ownable {
     USDC public usdc;
     uint256 public trancheSize;
     uint256 public totalRaised = 0;
-    // uint256 public reservePrice;
-    // uint256 public minIncrement;
-    // uint256 public timeoutPeriod;
 
-    // uint256 public auctionEnd;
-
-    // separated current dictionary into separate variables
     // psov:xxxxxx => seller
     address seller;
-    // investors:{ abc: 10, def: 25… }
     // investors => balanceOf
+    // todo bool active auction
 
     event AuctionCreated(address auctionAddress);
     event Payout(address addr, uint256 amount);
@@ -37,9 +31,6 @@ contract Auction is Ownable {
         SOVToken _sov,
         USDC _usdc,
         uint256 _trancheSize
-        // uint256 _reservePrice,
-        // uint256 _minIncrement,
-        // uint256 _timeoutPeriod
     )
         public
     {
@@ -47,23 +38,18 @@ contract Auction is Ownable {
         sov = _sov;
         usdc = _usdc;
         trancheSize = _trancheSize;
-        // reservePrice = _reservePrice;
-        // minIncrement = _minIncrement;
-        // timeoutPeriod = _timeoutPeriod;
-
+    
         seller = msg.sender;
         // auctionEnd = now + timeoutPeriod;
         emit AuctionCreated(address(this));
     }
-
-    // address highBidder;
 
     mapping(address => uint256) public balanceOf;
     address[] public addressIndexes;
     // results
     mapping(address => uint256) public results;
 
-    event Bid(uint256 highBid);
+    event Bid(uint256 bid);
 
     function bid(uint256 amount) public payable {
         emit Bid(amount);
@@ -81,6 +67,9 @@ contract Auction is Ownable {
         uint256 totalDeposited = usdc.balanceOf(address(this));
         require(totalDeposited > 0, "total totalDeposited not > 0");
         require(totalDeposited == totalRaised, "total deposited not equal to total raised");
+        // cash out the auction first
+        require(usdc.transfer(address(auctionManager), totalRaised), "Unable to transfer USDC from auction contract to auction manager");
+        // cash out everyone else 
         for (uint i = 0; i < addressIndexes.length; i++) {
             // calculate results of contract
             address addr = addressIndexes[i];
@@ -92,26 +81,9 @@ contract Auction is Ownable {
             emit Payout(addr, amountSOVTokens);
             sov.transfer(addr, amountSOVTokens);
         }
-        // notify the auction manager of the completion of this auction tranche
-        // to trigger the next auction trache, if exists
-        // auctionManager.onAuctionCompletion(address(this));
     }
 
-    // function resolve() public {
-    //     require(now >= auctionEnd);
-
-    //     uint256 t = sov.balanceOf(this);
-    //     if (highBidder == 0) {
-    //         require(sov.transfer(seller, t));
-    //     } else {
-    //         // transfer sovs to high bidder
-    //         require(sov.transfer(highBidder, t));
-
-    //         // transfer ether balanceOfto seller
-    //         balanceOf[seller] += balanceOf[highBidder];
-    //         balanceOf[highBidder] = 0;
-
-    //         highBidder = 0;
-    //     }
-    // }
+    function pricePerToken() view public returns (uint256) {
+        return SafeMath.div(totalRaised, trancheSize);
+    }
 }
