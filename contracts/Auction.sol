@@ -21,16 +21,18 @@ contract Auction is Ownable {
     address seller;
     // investors => balanceOf
     // todo bool active auction
+    uint public endDateTime;
 
     event AuctionCreated(address auctionAddress);
     event Payout(address addr, uint256 amount);
     event Contribution(address addr, uint256 amount);
-
+    
     constructor(
         AuctionManager _auctionManager,
         SOVToken _sov,
         USDC _usdc,
-        uint256 _trancheSize
+        uint256 _trancheSize,
+        uint _endDateTime
     )
         public
     {
@@ -38,7 +40,8 @@ contract Auction is Ownable {
         sov = _sov;
         usdc = _usdc;
         trancheSize = _trancheSize;
-    
+
+        endDateTime = _endDateTime;
         seller = msg.sender;
         // auctionEnd = now + timeoutPeriod;
         emit AuctionCreated(address(this));
@@ -52,6 +55,7 @@ contract Auction is Ownable {
     event Bid(uint256 bid);
 
     function bid(uint256 amount) public payable {
+        require (now < endDateTime, "Auction has already finished");
         emit Bid(amount);
         require(sov.whitelist(msg.sender), "Address is not on whitelist");
         require(usdc.transferFrom(msg.sender, address(this), amount), "Unable to transfer USDC from address to auction contract");
@@ -64,8 +68,10 @@ contract Auction is Ownable {
     }
 
     function payout() public {
+        require (now >= endDateTime, "Auction has not yet finished");
         uint256 totalDeposited = usdc.balanceOf(address(this));
-        require(totalDeposited > 0, "total totalDeposited not > 0");
+        // No need to check if the auction is empty, since we still want to be payout an empty auction and move onto the next one 
+        // require(totalDeposited > 0, "total totalDeposited not > 0");
         require(totalDeposited == totalRaised, "total deposited not equal to total raised");
         // cash out the auction first
         require(usdc.transfer(address(auctionManager), totalRaised), "Unable to transfer USDC from auction contract to auction manager");

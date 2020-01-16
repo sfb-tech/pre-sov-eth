@@ -20,6 +20,7 @@ contract AuctionManager is Ownable {
 	uint256 public tranches;
 	uint256 public supplyPercent;
 	uint256 public supplyPercentD;
+	uint public auctionDuration;
 
 	SOVToken public sov;
 	USDC public usdc;
@@ -46,13 +47,18 @@ contract AuctionManager is Ownable {
 		supplyPercent = _supplyPercent; // 40%
 		supplyPercentD = 10000;
 		// supplyPercent = FixidityLib.fractional(0.4);
+		auctionDuration = 1 hours; // 5 seconds 
 	}
 
 	function getAuctions() view public returns (address[] memory ) {
 	   return auctions;
 	}
 
-	function getTrancheSize() public returns(uint256) {
+	function test() public view returns(uint) {
+	    return now;
+	}
+
+	function getTrancheSize() public view returns(uint256) {
 		if(auctions.length == 0) {
 			return supply * initialPercent / initialPercentD;
 		}
@@ -83,7 +89,8 @@ contract AuctionManager is Ownable {
 		// determine how large the tranche size is for the next auction
 	   	uint256 trancheSize = getTrancheSize();
 	   	// create the next auction, configure the tranche size
-	   	Auction newAuction = new Auction(this, sov, usdc, trancheSize);
+	   	uint endDateTime = now + auctionDuration;
+	   	Auction newAuction = new Auction(this, sov, usdc, trancheSize, endDateTime);
 	    address auctionAddress = address(newAuction);
 	    // save the auction to our auctions key-value mapping
 	    // auctions[auctionAddress] = newAuction;

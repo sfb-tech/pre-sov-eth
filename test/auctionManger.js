@@ -1,4 +1,5 @@
-const { BN, constants, balance, expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
+const { BN, constants, balance, expectEvent, expectRevert, time  } = require('@openzeppelin/test-helpers');
+const helper = require("./helpers/truffleTestHelper");
 
 const AuctionManager = artifacts.require("AuctionManager");
 const USDC = artifacts.require("USDC");
@@ -6,6 +7,12 @@ const Auction = artifacts.require("Auction");
 const SOVToken = artifacts.require("SOVToken");
 
 var toBN = web3.utils.toBN
+
+// deprecated in favor of open zepplin
+// // wait five seconds
+// function sleep(ms) {
+//   return new Promise(resolve => setTimeout(resolve, ms));
+// }
 
 contract('AuctionManager', (accounts) => {
   it('AuctionManager should spawn auction', async () => {
@@ -25,7 +32,7 @@ contract('AuctionManager', (accounts) => {
     let pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
     assert.equal(pricePerTokenInTranche / 1E18, 0, "Auction starts off with price per token of 0");    
 
-    // mint 10 usdc for account 1
+    // mint 30,000 usdc for account 1
     const USDCInstance = await USDC.deployed();
     await USDCInstance.mint.sendTransaction(accounts[1], toBN(30000).mul(toBN(1E18)));
 
@@ -81,6 +88,8 @@ contract('AuctionManager', (accounts) => {
     let auctionSOVBalance = await SOVTokenInstance.balanceOf.call(auctionAddress);
     assert.equal(auctionSOVBalance / 1E4, 60000, "Auction doesn not have 60000 SOV");
 
+    await time.increase(time.duration.hours(1));
+
     // trigger the payout of the contract.
     await AuctionInstance.payout.sendTransaction();
     
@@ -130,6 +139,9 @@ contract('AuctionManager', (accounts) => {
     pricePerTokenInTranche = await NextAuctionInstance.pricePerToken.call()
     assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 3.87, "After bids of 100,000, auction has a price per token of $3.87");    
 
+    // fast forward in time to end of auction
+    await time.increase(time.duration.hours(1));
+
     // trigger the payout of the contract.
     await NextAuctionInstance.payout.sendTransaction();
 
@@ -141,7 +153,26 @@ contract('AuctionManager', (accounts) => {
     // get auctions from auciton manager array
     const auctionsArr = await AuctionManagerInstance.getAuctions.call();
     assert.equal(auctionsArr[0], AuctionInstance.address, "auction");    
-    assert.equal(auctionsArr[1], NextAuctionInstance.address, "auction");    
+    assert.equal(auctionsArr[1], NextAuctionInstance.address, "auction");  
+
+    // try to bid on an expired auction, expect failure
+    // authorize and send coins to contract
+    await USDCInstance.approve.sendTransaction(auctionAddress, toBN(70000).mul(toBN(1E18)), {from: accounts[2]})
+    // do not fastforward in time,  but still make bid
+    await expectRevert(AuctionInstance.bid.sendTransaction(toBN(70000).mul(toBN(1E18)), {from: accounts[2]}), "Auction has already finished")
+
+    // let's try to payout on an empty auction
+    const lastAuctionAddress = await AuctionManagerInstance.createAuction.call()
+    await AuctionManagerInstance.createAuction()
+    const LastAuctionInstance = await Auction.at(lastAuctionAddress)
+
+    // fast forward in time to end of auction
+    await time.increase(time.duration.hours(1));
+
+    await LastAuctionInstance.payout.sendTransaction();
+    // let's try to payout twice 
+    await LastAuctionInstance.payout.sendTransaction();
+
   });
 });
 
