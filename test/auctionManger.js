@@ -29,6 +29,9 @@ contract('AuctionManager', (accounts) => {
     await AuctionManagerInstance.createAuction()
     const AuctionInstance = await Auction.at(auctionAddress)
     
+    let totalRaised = await AuctionInstance.totalRaised.call()
+    assert.equal(totalRaised.toString(), 0, "Auction starts off with more than 0 USDC");
+
     let pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
     assert.equal(pricePerTokenInTranche / 1E18, 0, "Auction starts off with price per token of 0");    
 
@@ -54,6 +57,9 @@ contract('AuctionManager', (accounts) => {
     // send that usdc to auction 
     await AuctionInstance.bid.sendTransaction(toBN(30000).mul(toBN(1E18)), {from: accounts[1]})
 
+    totalRaised = await AuctionInstance.totalRaised.call()
+    assert.equal(totalRaised.toString(), 30000 * 1E18, "Auction should have 30000 USDC");
+
     pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
     assert.equal(pricePerTokenInTranche / 1E18, 0.5, "After a bid of 30000, auction has a price per token of $0.50");    
     
@@ -78,6 +84,9 @@ contract('AuctionManager', (accounts) => {
     // second bid 
     await AuctionInstance.bid.sendTransaction(toBN(70000).mul(toBN(1E18)), {from: accounts[2]})
 
+    totalRaised = await AuctionInstance.totalRaised.call()
+    assert.equal(totalRaised.toString(), 100000 * 1E18, "Auction should have 100000 USDC");
+
     pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
     assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 1.67, "After bids of 100,000, auction has a price per token of $1.67");    
 
@@ -92,6 +101,15 @@ contract('AuctionManager', (accounts) => {
 
     // trigger the payout of the contract.
     await AuctionInstance.payout.sendTransaction();
+
+    totalRaised = await AuctionInstance.totalRaised.call()
+    assert.equal(totalRaised.toString(), 100000 * 1E18, "Auction should still have 100000 USDC");
+
+    auctionUSDCBalance = await USDCInstance.balanceOf.call(auctionAddress);
+    assert.equal(auctionUSDCBalance / 1E18, 0, "Auction doesn not have 10 USDC");
+
+    // trigger the payout of the contract.
+    // expectRevert(AuctionInstance.payout.sendTransaction(), "if you try to payout on a non-zero-balance auction TWICE, it errors - because total raised != USDC balance of auciton")
     
     const accountOneSOVBalance = await SOVTokenInstance.balanceOf.call(accounts[1]);
     assert.equal(accountOneSOVBalance / 1E4, toBN(60000).mul(toBN(3)).div(toBN(10)), "account 1 doesn not have 18000 SOV");
@@ -172,6 +190,10 @@ contract('AuctionManager', (accounts) => {
     await LastAuctionInstance.payout.sendTransaction();
     // let's try to payout twice 
     await LastAuctionInstance.payout.sendTransaction();
+
+    // make sure price per token of historical auctoin is still the same 
+    pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
+    assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 1.67, "After bids of 100,000, auction has a price per token of $1.67");    
 
   });
 });

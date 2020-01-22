@@ -85,7 +85,9 @@ contract AuctionManager is Ownable {
 		return trancheSize;
 	}
 
-	function createAuction() public onlyOwner returns(address) {
+	function createAuction() public returns(address) {
+		// only admins (as defined in the sov contract) can create auctions 
+		require(sov.admins(msg.sender) == true, "Only admins can create an auction");
 		// determine how large the tranche size is for the next auction
 	   	uint256 trancheSize = getTrancheSize();
 	   	// create the next auction, configure the tranche size
