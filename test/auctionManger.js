@@ -195,6 +195,20 @@ contract('AuctionManager', (accounts) => {
     pricePerTokenInTranche = await AuctionInstance.pricePerToken.call()
     assert.equal((pricePerTokenInTranche / 1E18).toFixed(2), 1.67, "After bids of 100,000, auction has a price per token of $1.67");    
 
+    // authorize new account and try to create an account 
+    const addAdmin = await SOVTokenInstance.addAdmin.call(accounts[1]);
+    assert.equal(addAdmin, true, "Cannot add admin!");
+    await SOVTokenInstance.addAdmin.sendTransaction(accounts[1]);
+    //   check is admin
+    const isAdmin = await SOVTokenInstance.admins.call(accounts[1]);
+    assert.equal(isAdmin, true, "New admin is not admin!");
+
+    // create a new auction from new admin
+    const newAdminAuctionAddress = await AuctionManagerInstance.createAuction.call({from: accounts[1]})
+    // await AuctionManagerInstance.createAuction()
+    // console.log(newAdminAuctionAddress)
+    
+
   });
 });
 
